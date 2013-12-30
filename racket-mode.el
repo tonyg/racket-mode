@@ -1882,6 +1882,16 @@ All commands in `lisp-mode-shared-map' are inherited by this map.")
   (modify-syntax-entry ?# "_ p14bn" scheme-mode-syntax-table)
   (modify-syntax-entry ?| "_ 23bn"  scheme-mode-syntax-table))
 
+;; In case not Emacs 24.1, define equivalent of its
+;; `pop-to-buffer-same-window'.
+(defun racket-pop-to-buffer-same-window
+  (&optional buffer-or-name norecord label)
+  "Pop to buffer specified by BUFFER-OR-NAME in the selected window."
+  (if (fboundp 'pop-to-buffer-same-window)
+      (funcall
+       'pop-to-buffer-same-window buffer-or-name norecord)
+    (funcall 'switch-to-buffer buffer-or-name norecord)))
+
 (provide 'racket-mode)
 
 ;; ;;; racket-mode.el ends here
