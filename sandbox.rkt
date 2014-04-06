@@ -23,7 +23,8 @@
          racket/pretty
          racket/runtime-path
          syntax/srcloc
-         "defn.rkt")
+         "defn.rkt"
+         "imports-gui.rkt")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -42,22 +43,40 @@
 
 ;; (or/c #f path?) -> any
 (define (run path-str)
-  ;; Use custodian to release all resources.
+  ;; Blow away resources from user-cust, and restore main orig-cust.
   (custodian-shutdown-all user-cust)
-  (set! user-cust (make-custodian orig-cust))
-  (current-custodian user-cust)
-  ;; Save the current namespace and check if it uses racket/gui/base
+  (current-custodian orig-cust)
+  ;; Save the current namespace. Save whether it uses racket/gui/base.
   (define orig-ns (current-namespace))
   (define had-gui? (module-declared? 'racket/gui/base))
   ;; Fresh, clear racket/base namespace.
   (current-namespace (make-base-namespace))
-  ;; If racket/gui/base module was instantiated in orig-ns, attach and
-  ;; require it into the new namespace, and _before_ requiring the new
-  ;; module. Avoids "cannot instantiate `racket/gui/base' a second
-  ;; time in the same process" problem.
-  (when had-gui?
-    (namespace-attach-module orig-ns 'racket/gui/base)
-    (namespace-require 'racket/gui/base))
+  ;; Special handling for racket/gui/base
+  (cond [had-gui?
+         ;; If racket/gui/base module was instantiated in orig-ns, attach
+         ;; and require it into the new namespace, and _before_ requiring
+         ;; the new module. Avoids "cannot instantiate `racket/gui/base' a
+         ;; second time in the same process" problem.
+         (namespace-attach-module orig-ns 'racket/gui/base)
+         (namespace-require 'racket/gui/base)
+         ;; Also need to create an eventspace.
+         (define (gdr sym)
+           (dynamic-require 'racket/gui/base sym))
+         (define current-eventspace (gdr 'current-eventspace))
+         (define make-eventspace    (gdr 'make-eventspace))
+         (current-eventspace (make-eventspace))]
+        [(imports-gui? path-str)
+         ;; racket/gui/base was not already required, but it is about
+         ;; to be required by the module we're about to load. Go ahead
+         ;; and require it now, so that we can do so on the main
+         ;; orig-cust.  Doing so lets us blow away user-cust later,
+         ;; without blowing away racket/gui/base.
+         (dynamic-require 'racket/gui/base #f)]
+        [else (void)])
+  ;; New custodian
+  (set! user-cust (make-custodian orig-cust))
+  (current-custodian user-cust)
+  ;; Load the user module, if any
   (define-values (mod load-dir) (path-string->mod-path&load-dir path-str))
   (when mod
     (parameterize ([current-load-relative-directory load-dir])
