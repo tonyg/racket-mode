@@ -24,7 +24,9 @@
          racket/pretty
          racket/runtime-path
          syntax/srcloc
-         "defn.rkt")
+         racket/gui/dynamic
+         "defn.rkt"
+         "imports-gui.rkt")
 
 (define (run-file path-str)
   (display (banner))
@@ -53,8 +55,7 @@
      ;; of parameters to be permissive (e.g. `sandbox-memory-limit`,
      ;; `sandbox-eval-limits`, and `sandbox-security-guard`) so we
      ;; don't need to set them here.
-     (parameterize ([current-namespace (make-base-empty-namespace)]
-                    [sandbox-input (current-input-port)]
+     (parameterize ([sandbox-input (current-input-port)]
                     [sandbox-output (current-output-port)]
                     [sandbox-error-output (current-error-port)]
                     [sandbox-propagate-exceptions #f]
@@ -105,6 +106,9 @@
 
 ;; (or/c #f path-string?) -> (or/c #f 'exit evaluator?)
 (define (make-eval path)
+  (when path
+    (maybe-require-racket/gui/base path))
+  (maybe-reuse-racket/gui/base)
   ;; Make a module evaluator if non-#f path, else plain
   ;; evaluator.  If exn:fail? creating a module evaluator --
   ;; e.g. it had a syntax error -- return #f saying to try again
@@ -116,6 +120,29 @@
                                      [else 'exit]))])
     (cond [path (make-module-evaluator path)]
           [else (make-evaluator 'racket)])))
+
+;; This eventspace is created only if/when racket/gui/base is required
+;; the first time by a user program.
+(define root-eventspace #f)
+
+(define (maybe-require-racket/gui/base path)
+  (when (and (not root-eventspace)
+             path
+             (imports-gui? path))
+    (define current-eventspace (dynamic-require 'racket/gui/base 'current-eventspace))
+    (define make-eventspace    (dynamic-require 'racket/gui/base 'make-eventspace))
+    (define root-eventspace (make-eventspace))
+    (current-eventspace root-eventspace)
+    (sandbox-gui-available #t)))
+
+(define (maybe-reuse-racket/gui/base)
+  (when root-eventspace
+    (define orig-ns (current-namespace))
+    (define ns (make-base-namespace))
+    (parameterize ([current-namespace ns])
+      (namespace-attach-module orig-ns 'racket/gui/base)
+      (namespace-require 'racket/gui/base))
+    (sandbox-namespace-specs (list (lambda () ns)))))
 
 (define (make-prompt-read path)
   (define-values (base name dir?) (cond [path (split-path path)]
