@@ -127,16 +127,13 @@
   (when (and (not root-eventspace)
              path
              (imports-gui? path))
-    (require-racket/gui/base)))
-
-(define (require-racket/gui/base)
-  (define current-eventspace (dynamic-require 'racket/gui/base
-                                              'current-eventspace))
-  (define make-eventspace    (dynamic-require 'racket/gui/base
-                                              'make-eventspace))
-  (set! root-eventspace (make-eventspace))
-  (current-eventspace root-eventspace)
-  (sandbox-gui-available #t))
+    (define current-eventspace (dynamic-require 'racket/gui/base
+                                                'current-eventspace))
+    (define make-eventspace    (dynamic-require 'racket/gui/base
+                                                'make-eventspace))
+    (set! root-eventspace (make-eventspace))
+    (current-eventspace root-eventspace)
+    (sandbox-gui-available #t)))
 
 (define (make-prompt-read path)
   (define-values (base name dir?) (cond [path (split-path path)]
