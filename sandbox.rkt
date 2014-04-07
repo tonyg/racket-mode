@@ -106,9 +106,7 @@
 
 ;; (or/c #f path-string?) -> (or/c #f 'exit evaluator?)
 (define (make-eval path)
-  (when path
-    (maybe-require-racket/gui/base path))
-  (maybe-reuse-racket/gui/base)
+  (maybe-require-racket/gui/base path)
   ;; Make a module evaluator if non-#f path, else plain
   ;; evaluator.  If exn:fail? creating a module evaluator --
   ;; e.g. it had a syntax error -- return #f saying to try again
@@ -123,26 +121,22 @@
 
 ;; This eventspace is created only if/when racket/gui/base is required
 ;; the first time by a user program.
-(define root-eventspace #f)
+(define root-eventspace #f) ;(or/c #f eventspace?)
 
 (define (maybe-require-racket/gui/base path)
   (when (and (not root-eventspace)
              path
              (imports-gui? path))
-    (define current-eventspace (dynamic-require 'racket/gui/base 'current-eventspace))
-    (define make-eventspace    (dynamic-require 'racket/gui/base 'make-eventspace))
-    (define root-eventspace (make-eventspace))
-    (current-eventspace root-eventspace)
-    (sandbox-gui-available #t)))
+    (require-racket/gui/base)))
 
-(define (maybe-reuse-racket/gui/base)
-  (when root-eventspace
-    (define orig-ns (current-namespace))
-    (define ns (make-base-namespace))
-    (parameterize ([current-namespace ns])
-      (namespace-attach-module orig-ns 'racket/gui/base)
-      (namespace-require 'racket/gui/base))
-    (sandbox-namespace-specs (list (lambda () ns)))))
+(define (require-racket/gui/base)
+  (define current-eventspace (dynamic-require 'racket/gui/base
+                                              'current-eventspace))
+  (define make-eventspace    (dynamic-require 'racket/gui/base
+                                              'make-eventspace))
+  (set! root-eventspace (make-eventspace))
+  (current-eventspace root-eventspace)
+  (sandbox-gui-available #t))
 
 (define (make-prompt-read path)
   (define-values (base name dir?) (cond [path (split-path path)]
