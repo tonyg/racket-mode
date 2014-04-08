@@ -27,25 +27,15 @@
          racket/gui/dynamic
          "defn.rkt")
 
+(module+ main
+  (display (banner))
+  (run #f))
+
+;; A struct to use with `raise`.
 (struct run-new-sandbox (path)) ;(or/c #f path-string?)
 
-(define (run-file path-str)
-  (display (banner))
-  (let loop ([x (run-new-sandbox path-str)])
-    (define next (do-run x))
-    (unless (eq? next 'exit)
-      (newline)
-      (loop next))))
-
-;; do-run :: run-new-sandbox? -> (or/c 'exit run-new-sandbox?)
-;;
-;; Takes a path-string? for a .rkt file, or #f meaning top-level #lang
-;; racket.
-;;
-;; Returns similar path-string? or #f if REPL should be
-;; restarted, else 'exit if we should simply exit.
-(define (do-run x)
-  (match-define (run-new-sandbox path-str) x)
+;; (or/c #f path-string?) -> any
+(define (run path-str)
   (define-values (path load-dir) (path-string->path&load-dir path-str))
   (call-with-trusted-sandbox-configuration
    (lambda ()
@@ -65,16 +55,18 @@
                     [current-load-relative-directory load-dir]
                     [current-prompt-read (make-prompt-read path)]
                     [error-display-handler our-error-display-handler])
+       (define orig-eval (current-eval))
+       (define (rerun x) ;; run-new-sandbox? -> any
+         (define sandbox-eval (current-eval))
+         (current-eval orig-eval)
+         (kill-evaluator sandbox-eval)
+         (newline)
+         (run (run-new-sandbox-path x)))
        (match (make-eval path)
          ['exit 'exit]
          [e (parameterize ([current-eval e])
-              (with-handlers
-                  ([exn:fail:sandbox-terminated? (lambda (exn)
-                                                   (display-exn exn)
-                                                   'exit)]
-                   [run-new-sandbox? (lambda (x)
-                                       (kill-evaluator (current-eval))
-                                       x)])
+              (with-handlers ([exn:fail:sandbox-terminated? display-exn]
+                              [run-new-sandbox?             rerun])
                 (our-read-eval-print-loop)))])))))
 
 ;; path-string? -> (values (or/c #f path?) path?)
@@ -122,8 +114,8 @@
 ;; the first time by a user program.
 (define root-eventspace #f) ;(or/c #f eventspace?)
 
-;; This is like make-module-evaluator, but will detect the first
-;; module that wants to load racket/gui/base (directly or
+;; This is like make-module-evaluator, but detects the first module
+;; that wants to require racket/gui/base (directly or
 ;; transitively). It will abort that module load, use
 ;; require-racket/gui/base to instantiate our root eventspace, then do
 ;; the module load again.
@@ -429,8 +421,3 @@
       (display-commented (format "~v doesn't exist." (current-directory)))
       (current-directory old-wd))
     (display-commented (format "In ~v" (current-directory)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(module+ main
-  (run-file #f))
