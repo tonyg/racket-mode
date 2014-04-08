@@ -25,8 +25,7 @@
          racket/runtime-path
          syntax/srcloc
          racket/gui/dynamic
-         "defn.rkt"
-         "imports-gui.rkt")
+         "defn.rkt")
 
 (struct run-new-sandbox (path)) ;(or/c #f path-string?)
 
@@ -112,22 +111,40 @@
   ;; exn:fail? creating a module evaluator -- e.g. it had a syntax
   ;; error - try again making a plain evaluator. But if exn:fail?
   ;; creating a plain evaluator, return 'exit meaning give up.
-  (maybe-require-racket/gui/base path)
   (with-handlers ([exn:fail? (lambda (exn)
                                (display-exn exn)
                                (cond [path (make-eval #f)]
                                      [else 'exit]))])
-    (cond [path (make-module-evaluator path)]
+    (cond [path (make-module-evaluator/gui path)]
           [else (make-evaluator 'racket)])))
 
 ;; This eventspace is created only if/when racket/gui/base is required
 ;; the first time by a user program.
 (define root-eventspace #f) ;(or/c #f eventspace?)
 
-(define (maybe-require-racket/gui/base path)
-  (unless root-eventspace
-    (when (and path (imports-gui? path))
-      (require-racket/gui/base))))
+;; This is like make-module-evaluator, but will detect the first
+;; module that wants to load racket/gui/base (directly or
+;; transitively). It will abort that module load, use
+;; require-racket/gui/base to instantiate our root eventspace, then do
+;; the module load again.
+(define (make-module-evaluator/gui path)
+  (struct load-gui ())
+  (with-handlers ([load-gui? (lambda _
+                               (require-racket/gui/base)
+                               (make-module-evaluator path))])
+    (define orig-resolver (current-module-name-resolver))
+    (define resolver
+      (case-lambda
+        [(rmp ns)
+         (orig-resolver rmp ns)]
+        [(mp rmp stx load?)
+         (unless root-eventspace
+           (when (and (eq? mp 'racket/gui/base)
+                      load?)
+             (raise (load-gui))))
+         (orig-resolver mp rmp stx load?)]))
+    (parameterize ([current-module-name-resolver resolver])
+      (make-module-evaluator path))))
 
 (define (require-racket/gui/base)
   (unless root-eventspace
@@ -224,11 +241,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (our-error-display-handler str exn)
-  (unless (equal? "Check failure" (exn-message exn)) ;rackunit check fails
-    (display-commented str)
-    (display-srclocs exn)
-    (unless (exn:fail:user? exn)
-      (display-context exn))))
+  (when (exn? exn)
+    (unless (equal? "Check failure" (exn-message exn)) ;rackunit check fails
+      (display-commented str)
+      (display-srclocs exn)
+      (unless (exn:fail:user? exn)
+        (display-context exn)))))
 
 (define (display-srclocs exn)
   (when (exn:srclocs? exn)
