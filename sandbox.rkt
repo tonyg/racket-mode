@@ -28,24 +28,25 @@
          "defn.rkt"
          "imports-gui.rkt")
 
+(struct run-new-sandbox (path)) ;(or/c #f path-string?)
+
 (define (run-file path-str)
   (display (banner))
-  (let loop ([path-str path-str])
-    (define next (do-run path-str))
+  (let loop ([x (run-new-sandbox path-str)])
+    (define next (do-run x))
     (unless (eq? next 'exit)
       (newline)
       (loop next))))
 
-(struct run-new-sandbox (path)) ;(or/c #f path-string?)
-
-;; do-run :: (or/c #f path-string?) -> (or/c #f path-string? 'exit)
+;; do-run :: run-new-sandbox? -> (or/c 'exit run-new-sandbox?)
 ;;
 ;; Takes a path-string? for a .rkt file, or #f meaning top-level #lang
 ;; racket.
 ;;
 ;; Returns similar path-string? or #f if REPL should be
 ;; restarted, else 'exit if we should simply exit.
-(define (do-run path-str)
+(define (do-run x)
+  (match-define (run-new-sandbox path-str) x)
   (define-values (path load-dir) (path-string->path&load-dir path-str))
   (call-with-trusted-sandbox-configuration
    (lambda ()
@@ -59,21 +60,22 @@
                     [sandbox-output (current-output-port)]
                     [sandbox-error-output (current-error-port)]
                     [sandbox-propagate-exceptions #f]
+                    [sandbox-eval-handlers (list #f eval-handler/interaction)]
                     [compile-enforce-module-constants #f]
                     [compile-context-preservation-enabled #t]
                     [current-load-relative-directory load-dir]
                     [current-prompt-read (make-prompt-read path)]
                     [error-display-handler our-error-display-handler])
        (match (make-eval path)
-         [(and x (or #f 'exit)) x]
+         ['exit 'exit]
          [e (parameterize ([current-eval e])
               (with-handlers
                   ([exn:fail:sandbox-terminated? (lambda (exn)
                                                    (display-exn exn)
                                                    'exit)]
-                   [run-new-sandbox? (lambda (b)
+                   [run-new-sandbox? (lambda (x)
                                        (kill-evaluator (current-eval))
-                                       (run-new-sandbox-path b))])
+                                       x)])
                 (our-read-eval-print-loop)))])))))
 
 ;; path-string? -> (values (or/c #f path?) path?)
@@ -104,17 +106,16 @@
     [(_ e:expr ...+)
      #'(call-in-sandbox-context (current-eval) (lambda () e ...))]))
 
-;; (or/c #f path-string?) -> (or/c #f 'exit evaluator?)
+;; (or/c #f path-string?) -> (or/c 'exit evaluator?)
 (define (make-eval path)
+  ;; Make a module evaluator if non-#f path, else plain evaluator.  If
+  ;; exn:fail? creating a module evaluator -- e.g. it had a syntax
+  ;; error - try again making a plain evaluator. But if exn:fail?
+  ;; creating a plain evaluator, return 'exit meaning give up.
   (maybe-require-racket/gui/base path)
-  ;; Make a module evaluator if non-#f path, else plain
-  ;; evaluator.  If exn:fail? creating a module evaluator --
-  ;; e.g. it had a syntax error -- return #f saying to try again
-  ;; making a plain evaluator. But if exn:fail? creating a plain
-  ;; evaluator, return 'exit meaning give up.
   (with-handlers ([exn:fail? (lambda (exn)
                                (display-exn exn)
-                               (cond [path #f]
+                               (cond [path (make-eval #f)]
                                      [else 'exit]))])
     (cond [path (make-module-evaluator path)]
           [else (make-evaluator 'racket)])))
@@ -124,9 +125,12 @@
 (define root-eventspace #f) ;(or/c #f eventspace?)
 
 (define (maybe-require-racket/gui/base path)
-  (when (and (not root-eventspace)
-             path
-             (imports-gui? path))
+  (unless root-eventspace
+    (when (and path (imports-gui? path))
+      (require-racket/gui/base))))
+
+(define (require-racket/gui/base)
+  (unless root-eventspace
     (define current-eventspace (dynamic-require 'racket/gui/base
                                                 'current-eventspace))
     (define make-eventspace    (dynamic-require 'racket/gui/base
@@ -134,6 +138,30 @@
     (set! root-eventspace (make-eventspace))
     (current-eventspace root-eventspace)
     (sandbox-gui-available #t)))
+
+;; This is to catch the user typing (require racket/gui/base) at the
+;; REPL -- or any other require that transitively requires r/g/b --
+;; when r/g/b isn't already instantiated for the process.
+;;
+;; AFAIK there's no way to actually require it here: If r/g/b isn't
+;; already instantiated, we can't do it here. It needs to be done
+;; outside this evaluator, back in the main thread. So we just give an
+;; error message here.
+(define (eval-handler/interaction thk)
+  (define orig-resolver (current-module-name-resolver))
+  (define resolver
+    (case-lambda
+      [(rmp ns)
+       (orig-resolver rmp ns)]
+      [(mp rmp stx load?)
+       (unless root-eventspace
+         (when (and (eq? mp 'racket/gui/base)
+                    load?)
+           (error 'REPL
+                  "Can't racket/gui/base at the prompt. Use in a file.")))
+       (orig-resolver mp rmp stx load?)]))
+  (parameterize ([current-module-name-resolver resolver])
+    (call-with-custodian-shutdown thk)))
 
 (define (make-prompt-read path)
   (define-values (base name dir?) (cond [path (split-path path)]
