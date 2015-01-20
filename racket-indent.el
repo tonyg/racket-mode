@@ -71,12 +71,12 @@ Lisp function does not specify a special indentation."
                          (get (intern-soft function) 'scheme-indent-function))))
         (cond ((or
                 ;; a vector literal:  #( ... )
-                (and (eq (char-after (- open-pos 1)) ?\#)
-                     (eq (char-after open-pos) ?\())
+                (and (eq (char-before open-pos) ?\#)
+                     (eq (char-after  open-pos) ?\())
                 ;; a quoted '( ... ) or quasiquoted `( ...) list --
                 ;; but NOT syntax #'( ... )
-                (and (not (eq (char-after (- open-pos 2)) ?\#))
-                     (memq (char-after (- open-pos 1)) '(?\' ?\`))
+                (and (not (eq (char-before (1- open-pos)) ?\#))
+                     (memq (char-before open-pos) '(?\' ?\`))
                      (eq (char-after open-pos) ?\())
                 ;; #lang rackjure dict literal { ... }
                 (and racket-rackjure-indent
@@ -92,13 +92,57 @@ Lisp function does not specify a special indentation."
               ((and (null method)
                     (> (length function) 5)
                     (string-match "\\`with-" function))
-               (lisp-indent-specform 1 state
-                                     indent-point normal-indent))
+               (racket--indent-specform 1 state
+                                        indent-point normal-indent))
               ((integerp method)
-               (lisp-indent-specform method state
-                                     indent-point normal-indent))
+               (racket--indent-specform method state
+                                        indent-point normal-indent))
               (method
                (funcall method state indent-point normal-indent)))))))
+
+(defun racket--indent-specform (count state indent-point normal-indent)
+  "This is like `lisp-indent-specform' but fixes bug #50.
+
+To find last form, COUNT is decremented -- and it can go negative
+when there is more than one form per line. In that case
+`lisp-indent-specform' returns NORMAL-INDENT instead of body
+indent. Often they're the same and it doesn't matter, but they
+differ in the bug #50 examples.
+
+While I was at it, I simplified the logic to remove what seemed
+like N/A cruft (I hope I'm right about that.)"
+  (let ((containing-form-start (elt state 1))
+        (orig-count count)
+        body-indent containing-form-column)
+    ;; Move to the start of containing form, calculate indentation
+    ;; to use for non-distinguished forms (> count), and move past the
+    ;; function symbol.  lisp-indent-function guarantees that there is at
+    ;; least one word or symbol character following open paren of containing
+    ;; form.
+    (goto-char containing-form-start)
+    (setq containing-form-column (current-column))
+    (setq body-indent (+ lisp-body-indent containing-form-column))
+    (forward-char 1)
+    (forward-sexp 1)
+    ;; Now find the start of the last form.
+    (parse-partial-sexp (point) indent-point 1 t)
+    (while (and (< (point) indent-point)
+                (condition-case ()
+                    (progn
+                      (setq count (1- count))
+                      (forward-sexp 1)
+                      (parse-partial-sexp (point) indent-point 1 t))
+                  (error nil))))
+    ;; Point is sitting before first character of last (or count) sexp.
+    (if (> count 0)
+        ;; A distinguished form. Use double lisp-body-indent.
+        (list (+ containing-form-column (* 2 lisp-body-indent))
+              containing-form-start)
+      ;; A non-distinguished form.
+      (if (or (and (= orig-count 0) (= count 0))
+              (and (<= count 0) (<= body-indent normal-indent)))
+          body-indent
+        normal-indent))))
 
 (defun racket--conditional-indent (state indent-point normal-indent
                                    looking-at-regexp true false)
