@@ -61,18 +61,8 @@ Lisp function does not specify a special indentation."
     (goto-char (1+ (elt state 1)))
     (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
     (if (and (elt state 2)
-             (not (looking-at "\\sw\\|\\s_\\|(\\|\\[\\|{")))
-        ;; car of form doesn't seem to be a symbol or a compound item
+             (not (looking-at "\\sw\\|\\s_")))
         (progn
-          (when (not (> (save-excursion (forward-line 1) (point))
-                        calculate-lisp-indent-last-sexp))
-            (goto-char calculate-lisp-indent-last-sexp)
-            (beginning-of-line)
-            (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t))
-          ;; Indent under the list or under the first sexp on the same
-          ;; line as calculate-lisp-indent-last-sexp.  Note that first
-          ;; thing on that line has to be complete sexp since we are
-          ;; inside the innermost containing sexp.
           (backward-prefix-chars)
           (current-column))
       (let* ((function (buffer-substring (point) (progn (forward-sexp 1) (point))))
