@@ -1,3 +1,5 @@
+;;; Quoted list
+
 '(a b
   (a b
    c))
@@ -6,10 +8,8 @@
   (3)
   4 5)
 
-{a h
- b '(a x
-     s (x y
-        x v))}
+;;; Quasiquoted list (align with head) and unquote or unquote-splicing
+;;; (use normal indent rules for the form).
 
 `(Part ()
   (PartNumber ()
@@ -20,6 +20,42 @@
 `((,(x)
    ,y))
 
+`(Delete
+  ,@(for/list ([p (in-list paths)])
+      `(Object ()
+        (Key () ,p))))
+
+;;; Syntax
+
+#'(for/list ([x xs])
+    x)
+
+#`(for/list ([x xs])
+    x)
+
+;;; Rackjure style dictionary
+
+{a b
+ c d}
+
+{a b
+ c d
+ b '(a x
+     s (x y
+        x v))}
+
+;;; Vector
+
+#(a b
+  c d)
+
+;;; List with a keyword as first member (e.g. in many contracts)
+
+(#:x y
+ #:y x)
+
+;;; Normal function application.
+
 (foobar x
         x
         y)
@@ -27,6 +63,8 @@
 (dict-set a
           b
           c)
+
+;;; Forms with special indentation
 
 (let ([x 0])
   x)
@@ -36,15 +74,6 @@
 
 (with-handlers ([x y])
   a b c)
-
-#(a b
-  c d)
-
-{a b
- c d}
-
-(#:x y
- #:y x)
 
 ;;; Bug #50
 
