@@ -18,6 +18,57 @@
 
 (require 'racket-custom)
 
+;; The two top-level commands we care about are:
+;;   1. `indent-region' C-M-\
+;;   2. `indent-pp-sexp' C-M-q
+;;
+;; 1. `indent-region' is in indent.el. Normally it calls
+;; `indent-according-to-mode', which in turn calls the mode-specific
+;; `indent-line-function'. In lisp-mode that's `lisp-indent-line', in
+;; racket-mode that's `racket-indent-line'. These in turn call
+;; `calculate-lisp-indent'. That in turn calls the mode-specific
+;; `indent-function' -- in our case `racket-indent-function'.
+;;
+;; 2. `indent-pp-sexp' is lisp-specific, in lisp-mode.el. This is
+;; a wrapper for `indent-sexp', which also uses
+;; `calculate-lisp-indent', and therefore `racket-indent-function'.
+;; (AFAICT `indent-line' is not involved with this).
+;;
+;; The status quo Emacs design seems to support (a) indentation
+;; customization per mode, while also (b) allowing some lisp
+;; indentation logic to be factored out for "DRY" as
+;; `calculate-lisp-indent'. On the other hand, while tracing through
+;; with edebug there seems to be a lot of complexity, as well as some
+;; duplication of work, among `calculate-lisp-indent' and
+;; `lisp-indent-function'. Yet I'm not quite brave enough to take out
+;; a clean sheet of paper and rewrite from scratch.
+
+(defun racket-indent-line (&optional whole-exp)
+  "Indent current line as Racket code.
+
+This behaves like `lisp-indent-line', except that whole-line
+comments are treated the same regardless of whether they start
+with single or double semicolons."
+  (interactive)
+  (let ((indent (calculate-lisp-indent))
+	(pos (- (point-max) (point)))
+	(beg (progn (beginning-of-line) (point))))
+    (skip-chars-forward " \t")
+    (if (or (null indent) (looking-at "\\s<\\s<\\s<"))
+	;; Don't alter indentation of a ;;; comment line
+	;; or a line that starts in a string.
+        ;; FIXME: inconsistency: comment-indent moves ;;; to column 0.
+	(goto-char (- (point-max) pos))
+      (when (listp indent)
+        (setq indent (car indent)))
+      (unless (zerop (- indent (current-column)))
+        (delete-region beg (point))
+        (indent-to indent))
+      ;; If initial point was within line's indentation,
+      ;; position after the indentation.  Else stay at same point in text.
+      (when (> (- (point-max) pos) (point))
+        (goto-char (- (point-max) pos))))))
+
 (defvar calculate-lisp-indent-last-sexp)
 
 ;; Copied from lisp-mode but heavily modified
@@ -326,32 +377,6 @@ doesn't hurt to do so."
           (while 1)
           ;; `with-` forms given 1 automatically by our indent function
           )))
-
-(defun racket-indent-line (&optional whole-exp)
-  "Indent current line as Racket code.
-
-This behaves like `lisp-indent-line', except that whole-line
-comments are treated the same regardless of whether they start
-with single or double semicolons."
-  (interactive)
-  (let ((indent (calculate-lisp-indent))
-	(pos (- (point-max) (point)))
-	(beg (progn (beginning-of-line) (point))))
-    (skip-chars-forward " \t")
-    (if (or (null indent) (looking-at "\\s<\\s<\\s<"))
-	;; Don't alter indentation of a ;;; comment line
-	;; or a line that starts in a string.
-        ;; FIXME: inconsistency: comment-indent moves ;;; to column 0.
-	(goto-char (- (point-max) pos))
-      (when (listp indent)
-        (setq indent (car indent)))
-      (unless (zerop (- indent (current-column)))
-        (delete-region beg (point))
-        (indent-to indent))
-      ;; If initial point was within line's indentation,
-      ;; position after the indentation.  Else stay at same point in text.
-      (when (> (- (point-max) pos) (point))
-        (goto-char (- (point-max) pos))))))
 
 (provide 'racket-indent)
 
