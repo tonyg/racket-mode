@@ -34,10 +34,10 @@
     x)
 
 #'(#%app (#%app hasheq (quote a) (quote 42))
-   (quote a))
+         (quote a))
 
 (#%app (#%app hasheq (quote a) (quote 42))
- (quote a))
+       (quote a))
 
 #'(foo (#%app hasheq (quote a) (quote 42))
        (quote a))
