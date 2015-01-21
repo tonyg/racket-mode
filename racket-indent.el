@@ -115,8 +115,8 @@ Lisp function does not specify a special indentation."
     (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
     (if (and last-sexp-pos
              (or (not (looking-at "\\sw\\|\\s_")) ;not symbol
-                 (and (eq (char-before (point)) ?#)) ;Racket #:keyword
-                      (eq (char-after  (point)) ?:)))
+                 (and (eq (char-before (point)) ?#) ;Racket #:keyword
+                      (eq (char-after  (point)) ?:))))
         (progn
           (backward-prefix-chars)
           (current-column))

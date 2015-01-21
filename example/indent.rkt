@@ -33,6 +33,15 @@
 #`(for/list ([x xs])
     x)
 
+#'(#%app (#%app hasheq (quote a) (quote 42))
+   (quote a))
+
+(#%app (#%app hasheq (quote a) (quote 42))
+ (quote a))
+
+#'(foo (#%app hasheq (quote a) (quote 42))
+       (quote a))
+
 ;;; Rackjure style dictionary
 
 {a b
