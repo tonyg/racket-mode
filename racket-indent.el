@@ -122,7 +122,7 @@ Lisp function does not specify a special indentation."
              (open-pos (elt state 1))
              (method (or (get (intern-soft function) 'racket-indent-function)
                          (get (intern-soft function) 'scheme-indent-function))))
-        (cond ((racket--in-literal)
+        (cond ((racket--in-sequence)
                (goto-char open-pos)
                (1+ (current-column)))
               ((or (eq method 'defun)
@@ -141,7 +141,7 @@ Lisp function does not specify a special indentation."
               (method
                (funcall method state indent-point normal-indent)))))))
 
-(defun racket--in-literal ()
+(defun racket--in-sequence ()
   (save-excursion
     (condition-case ()
         (let ((more t))
