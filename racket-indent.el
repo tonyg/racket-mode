@@ -122,19 +122,7 @@ Lisp function does not specify a special indentation."
              (open-pos (elt state 1))
              (method (or (get (intern-soft function) 'racket-indent-function)
                          (get (intern-soft function) 'scheme-indent-function))))
-        (cond ((or
-                ;; a vector literal:  #( ... )
-                (and (eq (char-before open-pos) ?#)
-                     (eq (char-after  open-pos) ?\())
-                ;; a quoted '( ... ) or quasiquoted `( ...) list --
-                ;; but NOT syntax #'( ... )
-                (and (not (eq (char-before (1- open-pos)) ?#))
-                     (memq (char-before open-pos) '(?\' ?\`))
-                     (eq (char-after open-pos) ?\())
-                ;; #lang rackjure dict literal { ... }
-                (and racket-rackjure-indent
-                     (eq (char-after open-pos) ?{)))
-               ;; Indent all aligned with first item:
+        (cond ((racket--in-literal)
                (goto-char open-pos)
                (1+ (current-column)))
               ((or (eq method 'defun)
@@ -152,6 +140,29 @@ Lisp function does not specify a special indentation."
                                         indent-point normal-indent))
               (method
                (funcall method state indent-point normal-indent)))))))
+
+(defun racket--in-literal ()
+  (save-excursion
+    (condition-case ()
+        (let ((more t))
+          (while more
+            (backward-up-list)
+            (when (or
+                   ;; a vector literal: #( )
+                   (and (eq (char-before (point)) ?#)
+                        (eq (char-after  (point)) ?\())
+                   ;; a quoted '( ) or quasiquoted `( ) list --
+                   ;; but NOT syntax #'( ) or quasisyntax #`( )
+                   (and (not (eq (char-before (1- (point))) ?#))
+                        (memq (char-before (point)) '(?\' ?\`))
+                        (eq (char-after (point)) ?\())
+                   ;; #lang rackjure dict literal { ... }
+                   (and racket-rackjure-indent
+                        (eq (char-after (point)) ?{)))
+              (setq more nil)))
+          t)
+      (error nil))))
+
 
 (defun racket--indent-specform (count state indent-point normal-indent)
   "This is like `lisp-indent-specform' but fixes bug #50.
