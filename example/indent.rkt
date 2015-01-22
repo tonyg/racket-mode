@@ -66,12 +66,22 @@
 ;;; Normal function application.
 
 (foobar x
-        x
-        y)
+        y
+        z)
+
+(foobar
+ x
+ y
+ z)
 
 (dict-set a
           b
           c)
+
+(dict-set
+ a
+ b
+ c)
 
 ;;; Forms with special indentation
 
