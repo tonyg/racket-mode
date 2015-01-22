@@ -181,37 +181,40 @@ differ in the bug #50 examples.
 While I was at it, I simplified the logic to remove what seemed
 like N/A cruft (I hope I'm right about that.)"
   (let ((containing-form-start (elt state 1))
-        (orig-count count)
-        body-indent containing-form-column)
+        (orig-count count))
     ;; Move to the start of containing form, calculate indentation
     ;; to use for non-distinguished forms (> count), and move past the
     ;; function symbol.  lisp-indent-function guarantees that there is at
     ;; least one word or symbol character following open paren of containing
     ;; form.
     (goto-char containing-form-start)
-    (setq containing-form-column (current-column))
-    (setq body-indent (+ lisp-body-indent containing-form-column))
-    (forward-char 1)
-    (forward-sexp 1)
-    ;; Now find the start of the last form.
-    (parse-partial-sexp (point) indent-point 1 t)
-    (while (and (< (point) indent-point)
-                (condition-case ()
-                    (progn
-                      (setq count (1- count))
-                      (forward-sexp 1)
-                      (parse-partial-sexp (point) indent-point 1 t))
-                  (error nil))))
-    ;; Point is sitting before first character of last (or count) sexp.
-    (if (> count 0)
-        ;; A distinguished form. Use double lisp-body-indent.
-        (list (+ containing-form-column (* 2 lisp-body-indent))
-              containing-form-start)
-      ;; A non-distinguished form.
-      (if (or (and (= orig-count 0) (= count 0))
-              (and (<= count 0) (<= body-indent normal-indent)))
-          body-indent
-        normal-indent))))
+    (let* ((containing-form-column (current-column))
+           (body-indent (+ lisp-body-indent containing-form-column))
+           non-distinguished-column)
+      (forward-char 1)
+      (forward-sexp 1)
+      (parse-partial-sexp (point) indent-point 1 t)
+      ;; Now find the start of the last form.
+      (while (and (< (point) indent-point)
+                  (condition-case ()
+                      (progn
+                        (setq count (1- count))
+                        (forward-sexp 1)
+                        (parse-partial-sexp (point) indent-point 1 t)
+                        (when (zerop count)
+                          (setq non-distinguished-column (current-column)))
+                        t)
+                    (error nil))))
+      ;; Point is sitting before first character of last (or count) sexp.
+      (cond (;; A distinguished form. Use double lisp-body-indent.
+             (> count 0)
+             (list (+ containing-form-column (* 2 lisp-body-indent))
+                   containing-form-start))
+            ((or (and (= orig-count 0) (= count 0))
+                 (and (= count 0) (<= body-indent normal-indent)))
+             body-indent)
+            (non-distinguished-column non-distinguished-column)
+            (t normal-indent)))))
 
 (defun racket--conditional-indent (state indent-point normal-indent
                                    looking-at-regexp true false)
