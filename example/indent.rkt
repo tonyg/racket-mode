@@ -94,8 +94,8 @@
 
 ;; begin and cond have 0 style
 (begin
- 0
- 0)
+  0
+  0)
 
 (begin 0
        0)
