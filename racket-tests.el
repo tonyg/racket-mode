@@ -58,6 +58,7 @@ FILE is interpreted as relative to this source directory."
 (faceup-defexplainer racket-tests/same-faceup)
 
 (ert-deftest racket-tests/font-lock ()
+  "Font-lock of example/*.rkt shouldn't change."
   (should (racket-tests/same-faceup "example/indent.rkt"))
   (should (racket-tests/same-faceup "example/example.rkt")))
 
