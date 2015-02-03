@@ -81,12 +81,9 @@ FILE is interpreted as relative to this source directory."
 Currently this is really just a regression test for bug #81. This
 could be expanded into a series of exhaustive tests of all the
 special forms it handles."
-  (let ((input "[cond [[f x] #t][else #f]]"))
-    (should (racket-tests/brackets nil
-                                   input
-                                   input))
-    (should (racket-tests/brackets t
-                                   input
-                                   "(cond [(f x) #t][else #f])"))))
+  (let ((before "[cond [[f x] #t][else #f]]")
+        (after  "(cond [(f x) #t][else #f])"))
+    (should (racket-tests/brackets nil before before))
+    (should (racket-tests/brackets t   before after))))
 
 (provide 'racket-tests)
