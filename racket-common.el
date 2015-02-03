@@ -85,14 +85,12 @@
    ((rx "#;")
     (0 (ignore (racket--syntax-propertize-sexp-comment))))
    ;; Treat #px"" and #rx"" as single sexpr for navigation and indent.
-   ((rx (group (or "#px" "#rx"))
-        (group "\"")
-        (group (zero-or-more (not (any "\""))))
-        (group "\""))
-    (1 "'")
-    (2 "\"")
-    (3 (ignore))
-    (4 "\""))
+   ((rx (group ?# (or "px" "rx"))
+        ?\"
+        (* (or (not (any ?\"))
+               (seq ?\\ ?\")))
+        ?\")
+    (1 "'"))
    ;; Treat '|symbol with spaces| as all word syntax for nav
    ((rx ?' ?| (+? any) ?|)
     (0 "w"))))
