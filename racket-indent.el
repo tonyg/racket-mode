@@ -179,7 +179,12 @@ Lisp function does not specify a special indentation."
               ((integerp method)
                (racket--indent-specform method state indent-point normal-indent))
               (method
-               (funcall method state indent-point normal-indent)))))))
+               (funcall method state indent-point normal-indent))
+              (t (let ((method (get (intern-soft head) 'scheme-indent-function)))
+                   (cond ((integerp method)
+                          (racket--indent-specform method state indent-point normal-indent))
+                         (method
+                          (funcall method state indent-point normal-indent))))))))))
 
 (defun racket--align-sequence-with-head ()
   "Indent items with the head item for certain sequences?
